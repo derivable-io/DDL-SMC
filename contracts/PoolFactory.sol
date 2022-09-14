@@ -2,23 +2,39 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
 import "./interfaces/ICPTokenFactory.sol";
 import "./interfaces/IDTokenFactory.sol";
-import "./CollateralPool.sol";
+import "./Pool.sol";
 
-contract PoolFactory {
+contract PoolFactory is Ownable {
     using SafeERC20 for IERC20;
 
     bytes32 private constant VERSION = keccak256("PoolFactory_v1");
 
-    IDTokenFactory private _dFactory;
-    ICPTokenFactory private _cFactory;
-
+    address private _dFactory;
+    address private _gateway;
+    ICPTokenFactory private _cpFactory;
+    
     mapping(address => bool) private _pMap;
     address[] private _pools;
 
     event NewPool(address indexed creator, address indexed pool);
+
+    constructor(address _dFactory_, address _cpFactory_) Ownable() {
+        _dFactory = _dFactory_;
+        _cpFactory = ICPTokenFactory(_cpFactory_);
+    }
+
+    function setGateway(address _gateway_) external onlyOwner {
+        require(
+            gateway() == address(0), "Gateway already set"
+        );
+        require(_gateway_ != address(0), "Set zero address");
+
+        _gateway = _gateway_;
+    }
 
     /**
         @notice Create a new Collateral Pool contract
@@ -27,10 +43,7 @@ contract PoolFactory {
                 - Pool Owner (EOA)
                 - Management contract
                 - DAO
-            - [1]: BaseToken - Address of Liquidity Token (Native Coin = 0x00)
-            - [2]: Gateway - External contract that helps to calculate:
-                - Convert `cAmount` (Collateral Amount) -> `cpAmount` (Collateral Pool Amount)
-                - Convert  `cpAmount` (Collateral Pool Amount) -> `cAmount` (Collateral Amount)
+            - [1]: CToken - Address of Liquidity Token (Native Coin = 0x00)
         @param _poolConfigurations      Immutable settings of the Collateral Pool
             - [0]: Target Collateral Ratio (1 < TCR)
             - [1]: FeeBase
@@ -43,26 +56,27 @@ contract PoolFactory {
     */
     function createPool(
         uint256 _initAmount,
-        address[3] calldata _extCont,
+        address[2] calldata _extCont,
         uint256[3] calldata _poolConfigurations,
         string[4] calldata _poolInfo
     ) external payable {
         address _sender = msg.sender;
         bytes memory _bytecode = abi.encodePacked(
-            type(CollateralPool).creationCode,
+            type(Pool).creationCode,
             abi.encode(
                 _dFactory,
+                gateway(),
                 _extCont,
                 _poolConfigurations,
                 bytes(_poolInfo[0])
             )
         );
         bytes32 _salt = keccak256(
-            abi.encodePacked(_sender, _extCont[0], _extCont[1], _extCont[2], bytes(_poolInfo[0]))
+            abi.encodePacked(_sender, _extCont[0], _extCont[1], bytes(_poolInfo[0]))
         );
 
         address _pool = Create2.deploy(0, _salt, _bytecode);
-        address _cpToken = _cFactory.newCPToken(_pool, _poolInfo[1], _poolInfo[2], _poolInfo[3]);
+        address _cpToken = _cpFactory.newCPToken(_pool, _poolInfo[1], _poolInfo[2], _poolInfo[3]);
         
         if (_extCont[1] == address(0)) 
             require(msg.value == _initAmount, "Invalid init collateral");
@@ -70,7 +84,7 @@ contract PoolFactory {
             require(msg.value == 0, "Invalid init collateral");
             IERC20(_extCont[1]).safeTransferFrom(_sender, _pool, _initAmount);
         }
-        CollateralPool(_pool).initialize{value: msg.value}(_cpToken, _sender, _initAmount);
+        Pool(_pool).initialize{value: msg.value}(_cpToken, _sender, _initAmount);
 
         _pools.push(_pool);
         _pMap[_pool] = true;
@@ -89,11 +103,15 @@ contract PoolFactory {
     }
 
     function cTokenFactory() external view returns (address) {
-        return address(_cFactory);
+        return address(_cpFactory);
     }
 
     function dTokenFactory() external view returns (address) {
-        return address(_dFactory);
+        return _dFactory;
+    }
+
+    function gateway() public view returns (address) {
+        return _gateway;
     }
 }
 

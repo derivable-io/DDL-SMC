@@ -6,15 +6,15 @@ import "./interfaces/IDTokenFactory.sol";
 import "./interfaces/IDDLToken.sol";
 import "./interfaces/IGateway.sol";
 
-contract CollateralPool {
+contract Pool {
     using SafeERC20 for IERC20;
 
-    bytes32 private constant VERSION = keccak256("Collateral_Pool_v1");
+    bytes32 private constant VERSION = keccak256("Pool_v1");
     uint256 private constant DENOMINATOR = 10_000;
     uint256 private constant DEFAULT_DEPEG_RATE = 10_000;
 
     address private immutable DFACTORY;
-    address private immutable BASE_TOKEN;
+    address private immutable CTOKEN;
     address private immutable GATEWAY;
 
     uint256 private immutable TCR;
@@ -48,23 +48,21 @@ contract CollateralPool {
                 - Pool Owner (EOA)
                 - Management contract
                 - DAO
-            [1]: BaseToken - Address of Liquidity Token (Native Coin = 0x00)
-            [2]: Gateway - External contract that helps to calculate:
-                - Convert `cAmount` (Collateral Amount) -> `cpAmount` (Collateral Pool Amount)
-                - Convert  `cpAmount` (Collateral Pool Amount) -> `cAmount` (Collateral Amount)
+            [1]: CToken - Address of Liquidity Token (Native Coin = 0x00)
     */
     constructor(
         address _dFactory,
-        address[3] memory _extCont,
+        address _gateway,
+        address[2] memory _extCont,
         uint256[3] memory _poolConfigurations,
         string memory _poolURL_
     ) {
         _owner = _extCont[0];
 
         DFACTORY = _dFactory;
-        BASE_TOKEN = _extCont[1];
-        GATEWAY = _extCont[2];
-
+        GATEWAY = _gateway;
+        CTOKEN = _extCont[1];
+        
         TCR = _poolConfigurations[0];
         FEE_BASE = _poolConfigurations[1];
         FEE_RATE = _poolConfigurations[2];
@@ -94,6 +92,7 @@ contract CollateralPool {
 
     function addDToken(
         bytes32 _hash,
+        address _extLogic,
         string calldata _name,
         string calldata _symbol,
         string calldata _url
@@ -103,6 +102,8 @@ contract CollateralPool {
         );
         _dTokens[_hash] = _dToken;
         _depegs[_dToken] = DEFAULT_DEPEG_RATE;
+
+        IGateway(gateway()).setExtLogic(_dToken, _extLogic);
 
         emit NewDerivative(address(this), _dToken, _hash);
     }
@@ -131,7 +132,8 @@ contract CollateralPool {
             IERC20(_cpToken_).balanceOf(_requestor) >= _cpAmount, "Insufficient balance"
         );
     
-        uint256 _cAmount = IGateway(calculation()).removeCollateral(_cpAmount);
+        (uint256 _totalC, uint256 _totalCP) = total();
+        uint256 _cAmount = _totalC * _cpAmount / _totalCP;
         _withdraw(_cpToken_, _requestor, _cpAmount, _cAmount);
 
         emit RemoveCollateral(_requestor, _cpAmount, _cAmount);
@@ -168,7 +170,7 @@ contract CollateralPool {
     }
 
     function total() public view returns (uint256 _totalC, uint256 _totalCP) {
-        address _token = baseToken();
+        address _token = cToken();
         if (_token == address(0))
             _totalC = address(this).balance;
         else
@@ -194,12 +196,12 @@ contract CollateralPool {
         return (TCR, FEE_BASE, FEE_RATE);
     }
     
-    function calculation() public view returns (address) {
+    function gateway() public view returns (address) {
         return GATEWAY;
     }
 
-    function baseToken() public view returns (address) {
-        return BASE_TOKEN;
+    function cToken() public view returns (address) {
+        return CTOKEN;
     }
 
     function dFactory() external view returns (address) {
@@ -229,17 +231,17 @@ contract CollateralPool {
 
     function _derivative(address _dToken, uint256 _inAmount, bool _isMint) private returns (uint256 _outAmount, uint256 _fee) {
         uint256 _depeg = _getDepeg(_dToken);
-        uint256 _quote = IGateway(calculation()).getMarketPrice();
+        uint256 _quote = IGateway(gateway()).getMarketPrice();
         //  Mint Derivative:
         //  - Fee is charged on an amount of CToken (`_inAmount`) before calculating a minting amount of DToken (`_outAmount`)
         //  Burn Derivative:
         //  - Fee is charged on an amount of CToken (`_outAmount`) after calculating a burning amount of DToken (`_inAmount`)
         if (_isMint) {
             _fee = _chargeFee(_inAmount);
-            _outAmount = (_inAmount - _fee) / (_quote * _depeg);
+            _outAmount = (_inAmount - _fee) * DENOMINATOR / (_quote * _depeg);
         }
         else {
-            _outAmount = _inAmount * _quote * _depeg;
+            _outAmount = _inAmount * _quote * _depeg / DENOMINATOR;
             _fee = _chargeFee(_outAmount);
             _outAmount -= _fee;
         }
@@ -248,7 +250,8 @@ contract CollateralPool {
     }
 
     function _addCollateral(address _to, uint256 _cAmount) private {
-        uint256 _cpAmount = IGateway(calculation()).addCollateral(_cAmount);
+        (uint256 _totalC, uint256 _totalCP) = total();
+        uint256 _cpAmount = _totalCP * _cAmount / _totalC;
         IDDLToken(cpToken()).mint(_to, _cpAmount);
 
         emit AddCollateral(_to, _cAmount, _cpAmount);
@@ -256,11 +259,11 @@ contract CollateralPool {
 
     function _withdraw(address _token, address _to, uint256 _inAmount, uint256 _outAmount) private {
         IDDLToken(_token).burn(_to, _inAmount);
-        _transfer(baseToken(), address(this), _to, _outAmount);
+        _transfer(cToken(), address(this), _to, _outAmount);
     }
 
     function _deposit(uint256 _cAmount) private {
-        address _token = baseToken();
+        address _token = cToken();
         if(_token == address(0))
             require(msg.value == _cAmount, "Invalid collateral amount");
         else
