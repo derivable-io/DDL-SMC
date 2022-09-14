@@ -1,0 +1,16 @@
+### Deployed Mock ERC-20 Token
+- Network: Goerli
+- Contracts:
+    - WETH: [0xd98DaeED0e3562EE43DEdaE98f3fa4e585A9928E](https://goerli.etherscan.io/address/0xd98DaeED0e3562EE43DEdaE98f3fa4e585A9928E)
+    - USDT: [0x3a4b166A1eE6d6c43e00047bFF33AB370170061a](https://goerli.etherscan.io/address/0x3a4b166A1eE6d6c43e00047bFF33AB370170061a)
+    - USDC: [0x34d302E0f4a26eCaEce823BB6E028748B98061Fa](https://goerli.etherscan.io/address/0x34d302E0f4a26eCaEce823BB6E028748B98061Fa)
+    - DAI: [0x9E24a34cb7b09688FA39D173F3CC2161b1a51926](https://goerli.etherscan.io/address/0x9E24a34cb7b09688FA39D173F3CC2161b1a51926)
+- Pool (UniswapV2):
+    - USDT/WETH: [0xd0F6157BFF23a33920bdaF203c134580ca1d3a77](https://goerli.etherscan.io/address/0xd0F6157BFF23a33920bdaF203c134580ca1d3a77)
+    - USDC/WETH: [0xe36e73EEcb64105b549AbBB2f1B08Fd7d35Af853](https://goerli.etherscan.io/address/0xe36e73EEcb64105b549AbBB2f1B08Fd7d35Af853)
+    - DAI/WETH: [0x1A74C50Ff400511F9f9839B73F0A50C8a9296C56](https://goerli.etherscan.io/address/0x1A74C50Ff400511F9f9839B73F0A50C8a9296C56)
+- Pool (UniswapV3):
+    - WETH/USDT: [0xED322fd6703c6b3f6b7e43233A6bcd7f741Ff1B3](https://goerli.etherscan.io/address/0xED322fd6703c6b3f6b7e43233A6bcd7f741Ff1B3)
+- Fetch:
+    - FetchPriceUniswapV2: [0x533e331098ce304c8620270dC460EF57051C6147](https://goerli.etherscan.io/address/0x533e331098ce304c8620270dC460EF57051C6147)
+    - FetchPriceUniswapV3: [0x4651ae7d7f91DBE7aC9e4512094a03a13B6b02c6](https://goerli.etherscan.io/address/0x4651ae7d7f91DBE7aC9e4512094a03a13B6b02c6)
