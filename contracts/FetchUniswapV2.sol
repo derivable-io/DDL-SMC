@@ -8,7 +8,7 @@ import "@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol";
     @title Fetch Price
     @dev This contract supports fetching price of one Token using Uniswap Pool ((UniswapV2Pair))
 */
-contract FetchPriceUniswapV2 is Ownable {
+contract FetchUniswapV2 is Ownable {
     using FixedPoint for *;
 
     struct Info {
@@ -19,14 +19,14 @@ contract FetchPriceUniswapV2 is Ownable {
     mapping(address => mapping(address => Info)) private lastInfo;
     mapping(address => mapping(address => uint256)) private lastPriceAverages;
 
-    function addToken(address[] calldata _tokens, address[] calldata _pools) external onlyOwner {
+    function addToken(address[] calldata _tokens, address[] calldata _pools) external virtual onlyOwner {
         uint256 _len = _tokens.length;
 
         for (uint256 i; i < _len; i++)
             _update(_tokens[i], _pools[i]);
     }
 
-    function fetch(address _token, address _pool, uint256 _amount) external returns (uint256 _quoteAmount) {
+    function fetch(address _token, address _pool, uint256 _amount) public virtual returns (uint256 _quoteAmount) {
         (uint256 _priceCumulativeLast, uint256 _lastTimestamp) = getLastInfo(_token, _pool);
         require(_lastTimestamp != 0, "Token or Pool not supported");
 
@@ -45,7 +45,7 @@ contract FetchPriceUniswapV2 is Ownable {
         }
     }
 
-    function _update(address _token, address _pool) private returns (uint256 _priceCumulative, uint256 _updatedTime) {
+    function _update(address _token, address _pool) internal virtual returns (uint256 _priceCumulative, uint256 _updatedTime) {
         uint256 _price0Cumulative;
         uint256 _price1Cumulative;
         //  Does not need to check whether pool is valid (reserve0 != 0 and reserve1 != 0)
@@ -65,11 +65,11 @@ contract FetchPriceUniswapV2 is Ownable {
         lastInfo[_token][_pool].lastTimestamp = _updatedTime;
     }
 
-    function getLastInfo(address _token, address _pool) public view returns (uint256, uint256) {
+    function getLastInfo(address _token, address _pool) public virtual view returns (uint256, uint256) {
         return (lastInfo[_token][_pool].priceCumulativeLast, lastInfo[_token][_pool].lastTimestamp);
     }
 
-    function getLastPriceAvg(address _token, address _pool) public view returns (uint256) {
+    function getLastPriceAvg(address _token, address _pool) public virtual view returns (uint256) {
         return lastPriceAverages[_token][_pool];
     }
 }

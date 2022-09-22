@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: None
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/Address.sol";
+import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IPoolFactory.sol";
-import "./interfaces/ICollateralPool.sol";
 
 contract Gateway {
     using Address for address;
@@ -16,9 +16,11 @@ contract Gateway {
 
     mapping(address => mapping(address => address)) private _extLogics;
 
-    function getMarketPrice(address _dToken) external view returns (uint256) {
+    function getMarketPrice(address _dToken) external returns (uint256) {
         //  Call logic implementation and get P_ViC
-        // logics[msg.sender][_dToken].fetch(_dToken);
+        return IPriceOracle(
+            extLogic(msg.sender, _dToken)
+        ).fetch(_dToken);
     }
 
     function setExtLogic(address _token, address _extLogic) external {
@@ -37,10 +39,6 @@ contract Gateway {
 
     function extLogic(address _pool, address _token) public view returns (address) {
         return _extLogics[_pool][_token];
-    }
-
-    function _getTotal() private view returns (uint256 _totalC, uint256 _totalCP) {
-        (_totalC, _totalCP) = ICollateralPool(msg.sender).total();
     }
 }
 
