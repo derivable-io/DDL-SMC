@@ -14,7 +14,7 @@ contract UniswapV2PairPx is Ownable {
         address cToken;
         address quoteToken;
         address lpToken;
-        int128 leverage;
+        int256 leverage;
     }
 
     uint256 private constant Q112 = 2**112;
@@ -23,6 +23,7 @@ contract UniswapV2PairPx is Ownable {
     IUniswapV2Factory public immutable UNISWAPV2_FACTORY;
 
     mapping(address => TokenInfo) private _dTokens;
+    mapping(address => uint256) private _basePrices;
 
     constructor(IFetchUniswapV2 _fetchPx, IUniswapV2Factory _factory) Ownable() {
         fetchPx = _fetchPx;
@@ -53,15 +54,91 @@ contract UniswapV2PairPx is Ownable {
         _dTokens[_dToken] = _tokenInfo;
     }
 
-    function fetch(address _dToken) external virtual returns (uint256) {
+    function fetch(address _dToken) external virtual returns (uint256 _num, uint256 _denom) {
         TokenInfo memory _info = _dTokens[_dToken];
         require(
             _info.lpToken != address(0), "DToken not found"
         );
 
         (uint256 _lpPx, uint256 _cPx) = _fetch(_info.cToken, _info.quoteToken, _info.lpToken);
-        //  TODO: need to find a proper scaling number
-        //  PViC = _cPx^leverage / _lpPx
+        //  if `_basePrices[_dToken] = 0` (first round), then:
+        //      - `_basePrice = _cPx`
+        //      - update `_basePrice[_dToken] = `_cPx`
+        //  when `_basePrice = _cPx` -> (_cPx / _basePrice)^i = 1 regardless of leverage value
+        //  thus, return (1, _lpPx) immediately
+        uint256 _basePrice = _basePrices[_dToken];
+        if (_basePrice == 0)
+            _basePrice = _cPx;
+        _basePrices[_dToken] = _cPx;
+
+        if (_basePrice == _cPx)
+            return (1, _lpPx);
+
+        //  There are two cases: leverage < -2 or leverage > 2
+        //  abs(leverage) should be less than or equal 50 due to EVM constraints (gas, execution timeout)
+        //  PViC = (cPx / basePrice)^i / lpPx
+        //  if i < 0: PViC = (basePrice / cPx)^(abs(i)) / lpPx
+        //  if i > 0: PViC = (cPx / basePrice)^(abs(i)) / lpPx
+        uint256 _absLeverage = _abs(_info.leverage);
+        require(
+            _absLeverage >= 2 && _absLeverage <= 50, "Invalid leverage"
+        );
+
+        if (_info.leverage < 0)
+            return (_nLeverage(_basePrice, _cPx, _absLeverage), _basePrice * _lpPx);
+        else
+            return (_nLeverage(_cPx, _basePrice, _absLeverage), _basePrice * _lpPx);
+    }
+
+    function _abs(int256 _num) private pure returns (uint256) {
+        if (_num < 0)
+            return uint256(_num * -1);
+        return uint256(_num);
+    }
+
+    //  d = denominator and n = numerator
+    //  (a / b)^1 = a / b = n1 / d
+    //      n1 = a
+    //      d = b
+    //  (a / b)^2 = (a * a / b) / b = n2 / d
+    //      n2 = a * a / b
+    //      d = b
+    //  (a / b)^3 = (a * a / b * a / b) / b = (n2 * n1 / d) / d
+    //      n3 = n2 * n1 / d = a * a / b * a / b
+    //      d = b
+    //  (a / b)^4 = ((a * a / b) * (a * a / b) / b) / b = (n2 * n2 / d) / d
+    //      n4 = n2 * n2 / d
+    //      d = b
+    //  (a / b)^5 = (n3 * n2 / d) / d
+    //      n5 = n3 * n2 / d
+    //      d = b
+    //  (a / b)^6 = (n3 * n3 / d) / d
+    //      n6 = n3 * n3 / d
+    //      d = b
+    //  (a / b)^7 = (n3 * n4 / d) / d
+    //      n7 = n3 * n4 / d
+    //      d = b
+    //  _nLeverage() helps to calculate a numerator of:
+    //      + (basePrice / cPx)^(abs(i))
+    //      + (cPx / basePrice)^(abs(i))
+    function _nLeverage(uint256 _a, uint256 _b, uint256 _leverage) internal virtual pure returns (uint256) {
+        if (_leverage == 2)
+            return _n2(_a, _b);
+        else if (_leverage == 3)
+            return _n3(_a, _b);
+        
+        if (_leverage % 3 == 0 || _leverage % 3 == 2)
+            return _n3(_a, _b) * _nLeverage(_a, _b, _leverage - 3) / _b;
+        else 
+            return _n2(_a, _b) * _nLeverage(_a, _b, _leverage - 2) / _b;
+    }
+
+    function _n2(uint256 _a, uint256 _b) private pure returns (uint256) {
+        return _a * _a / _b;
+    }
+
+    function _n3(uint256 _a, uint256 _b) private pure returns (uint256) {
+        return _n2(_a, _b) * _a / _b;
     }
 
     function _fetch(
