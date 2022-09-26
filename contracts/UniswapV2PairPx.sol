@@ -64,16 +64,13 @@ contract UniswapV2PairPx is Ownable {
         //  if `_basePrices[_dToken] = 0` (first round), then:
         //      - `_basePrice = _cPx`
         //      - update `_basePrice[_dToken] = `_cPx`
-        //  when `_basePrice = _cPx` -> (_cPx / _basePrice)^i = 1 regardless of leverage value
+        //      - `_basePrice = _cPx` -> (_cPx / _basePrice)^i = 1 regardless of leverage value
         //  thus, return (1, _lpPx) immediately
         uint256 _basePrice = _basePrices[_dToken];
-        if (_basePrice == 0)
-            _basePrice = _cPx;
-        _basePrices[_dToken] = _cPx;
-
-        if (_basePrice == _cPx)
+        if (_basePrice == 0) {
+            _basePrices[_dToken] = _cPx;
             return (1, _lpPx);
-
+        }
         //  There are two cases: leverage < -2 or leverage > 2
         //  abs(leverage) should be less than or equal 50 due to EVM constraints (gas, execution timeout)
         //  PViC = (cPx / basePrice)^i / lpPx
@@ -84,10 +81,29 @@ contract UniswapV2PairPx is Ownable {
             _absLeverage >= 2 && _absLeverage <= 50, "Invalid leverage"
         );
 
-        if (_info.leverage < 0)
-            return (_nLeverage(_basePrice, _cPx, _absLeverage), _basePrice * _lpPx);
-        else
-            return (_nLeverage(_cPx, _basePrice, _absLeverage), _basePrice * _lpPx);
+        uint256 _k = 1;
+        if (_info.leverage < 0) {
+            if (_basePrice < _cPx) {
+                (_cPx, _k) = _adjust(_cPx);
+                _k = _k**_absLeverage;
+            }
+            return (_nLeverage(_basePrice, _cPx, _absLeverage), _cPx * _k * _lpPx);
+        }   
+        else {
+            if (_cPx < _basePrice) {
+                (_basePrice, _k) = _adjust(_basePrice);
+                _k = _k**_absLeverage;
+            }
+            return (_nLeverage(_cPx, _basePrice, _absLeverage), _basePrice * _k * _lpPx);
+        }   
+    }
+
+    function _adjust(uint256 _num) private pure returns (uint256, uint256) {
+        if (_num % 5 == 0)
+            return (_num / 5, 5);
+        else if (_num % 3 == 0)
+            return (_num / 3, 3);
+        return (_num / 2, 2);
     }
 
     function _abs(int256 _num) private pure returns (uint256) {

@@ -18,9 +18,9 @@ contract Gateway {
 
     function getMarketPrice(address _dToken) external returns (uint256) {
         //  Call logic implementation and get P_ViC
-        return IPriceOracle(
-            extLogic(msg.sender, _dToken)
-        ).fetch(_dToken);
+        // return IPriceOracle(
+        //     extLogic(msg.sender, _dToken)
+        // ).fetch(_dToken);
     }
 
     function setExtLogic(address _token, address _extLogic) external {
