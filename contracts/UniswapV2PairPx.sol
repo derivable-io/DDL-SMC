@@ -3,33 +3,33 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./libraries/FetchPairUniswapV2Lib.sol";
+import "./libraries/FetchUniswapV2Lib.sol";
 import "./libraries/LeverageLib.sol";
 
 contract UniswapV2PairPx is Ownable {
-    using FetchPairUniswapV2Lib for address;
+    using FetchUniswapV2Lib for address;
     using LeverageLib for *;
 
     struct TokenInfo {
-        address cToken;
-        address quoteToken;
-        address lpToken;
+        address bToken;         //  BaseToken (Token0/Token1)
+        address qToken;         //  QuoteToken
+        address lpToken;        //  LP_Token0_Token1
         int256 leverage;
     }
 
-    address public fetchPx;
+    address public extOracle;
 
     mapping(address => TokenInfo) private _dTokens;
     mapping(address => uint256) private _basePrices;
 
-    constructor(address _fetchPx) Ownable() {
-        fetchPx = _fetchPx;
+    constructor(address _extOracle) Ownable() {
+        extOracle = _extOracle;
     }
 
-    function setFetch(address _fetchPx) external virtual onlyOwner {
-        require(_fetchPx != address(0), "Set zero address");
+    function setFetch(address _extOracle) external virtual onlyOwner {
+        require(_extOracle != address(0), "Set zero address");
 
-        fetchPx = _fetchPx;
+        extOracle = _extOracle;
     }
 
     function addDToken(
@@ -40,9 +40,9 @@ contract UniswapV2PairPx is Ownable {
             _dTokens[_dToken].lpToken == address(0), "DToken already recorded"
         );
         require(
-            _tokenInfo.cToken != address(0) &&
+            _tokenInfo.bToken != address(0) &&
             _tokenInfo.lpToken != address(0) &&
-            _tokenInfo.quoteToken != address(0) &&
+            _tokenInfo.qToken != address(0) &&
             _tokenInfo.leverage != 0,
             "Invalid settings"
         );
@@ -56,22 +56,22 @@ contract UniswapV2PairPx is Ownable {
             _info.lpToken != address(0), "DToken not found"
         );
 
-        (uint256 _lpPx, uint256 _cPx) = fetchPx._fetch(_info.cToken, _info.quoteToken, _info.lpToken);
+        (uint256 _lpPx, uint256 _bPx) = extOracle._fetchPair(_info.bToken, _info.qToken, _info.lpToken);
         //  if `_basePrices[_dToken] = 0` (first round), then:
-        //      - `_basePrice = _cPx`
-        //      - update `_basePrice[_dToken] = `_cPx`
-        //      - `_basePrice = _cPx` -> (_cPx / _basePrice)^i = 1 regardless of leverage value
+        //      - `_basePrice = _bPx`
+        //      - update `_basePrice[_dToken] = `_bPx`
+        //      - `_basePrice = _bPx` -> (_bPx / _basePrice)^i = 1 regardless of leverage value
         //  thus, return (1, _lpPx) immediately
         uint256 _basePrice = _basePrices[_dToken];
         if (_basePrice == 0) {
-            _basePrices[_dToken] = _cPx;
+            _basePrices[_dToken] = _bPx;
             return (1, _lpPx);
         }
         //  There are two cases: leverage < -2 or leverage > 2
         //  abs(leverage) should be less than or equal 50 due to EVM constraints (gas, execution timeout)
-        //  PViC = (cPx / basePrice)^i / lpPx
-        //  if i < 0: PViC = (basePrice / cPx)^(abs(i)) / lpPx
-        //  if i > 0: PViC = (cPx / basePrice)^(abs(i)) / lpPx
+        //  PViC = (bPx / basePrice)^i / lpPx
+        //  if i < 0: PViC = (basePrice / bPx)^(abs(i)) / lpPx
+        //  if i > 0: PViC = (bPx / basePrice)^(abs(i)) / lpPx
         uint256 _absLeverage = _info.leverage._abs();
         require(
             _absLeverage >= 2 && _absLeverage <= 50, "Invalid leverage"
@@ -79,18 +79,18 @@ contract UniswapV2PairPx is Ownable {
 
         uint256 _k = 1;
         if (_info.leverage < 0) {
-            if (_basePrice < _cPx) {
-                (_cPx, _k) = _cPx._adjust();
+            if (_basePrice < _bPx) {
+                (_bPx, _k) = _bPx._adjust();
                 _k = _k**_absLeverage;
             }
-            return (_basePrice._nLeverage(_cPx, _absLeverage), _cPx * _k * _lpPx);
+            return (_basePrice._nLeverage(_bPx, _absLeverage), _bPx * _k * _lpPx);
         }   
         else {
-            if (_cPx < _basePrice) {
+            if (_bPx < _basePrice) {
                 (_basePrice, _k) = _basePrice._adjust();
                 _k = _k**_absLeverage;
             }
-            return (_cPx._nLeverage(_basePrice, _absLeverage), _basePrice * _k * _lpPx);
+            return (_bPx._nLeverage(_basePrice, _absLeverage), _basePrice * _k * _lpPx);
         }   
     }
 }

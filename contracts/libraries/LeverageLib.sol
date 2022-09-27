@@ -13,31 +13,34 @@ library LeverageLib {
         return uint256(_num);
     }
 
-    //  d = denominator and n = numerator
-    //  (a / b)^1 = a / b = n1 / d
-    //      n1 = a
-    //      d = b
-    //  (a / b)^2 = (a * a / b) / b = n2 / d
-    //      n2 = a * a / b
-    //      d = b
-    //  (a / b)^3 = (a * a / b * a / b) / b = (n2 * n1 / d) / d
-    //      n3 = n2 * n1 / d = a * a / b * a / b
-    //      d = b
-    //  (a / b)^4 = ((a * a / b) * (a * a / b) / b) / b = (n2 * n2 / d) / d
-    //      n4 = n2 * n2 / d
-    //      d = b
-    //  (a / b)^5 = (n3 * n2 / d) / d
-    //      n5 = n3 * n2 / d
-    //      d = b
-    //  (a / b)^6 = (n3 * n3 / d) / d
-    //      n6 = n3 * n3 / d
-    //      d = b
-    //  (a / b)^7 = (n3 * n4 / d) / d
-    //      n7 = n3 * n4 / d
-    //      d = b
-    //  _nLeverage() helps to calculate a numerator of:
-    //      + (basePrice / cPx)^(abs(i))
-    //      + (cPx / basePrice)^(abs(i))
+    /**  
+        + Note: d = denominator and n = numerator
+        + _nLeverage() helps to calculate a numerator of:
+            + (basePrice / cPx)^(abs(i))
+            + (cPx / basePrice)^(abs(i))
+
+        (a / b)^1 = a / b = n1 / d
+            n1 = a
+            d = b
+        (a / b)^2 = (a * a / b) / b = n2 / d
+            n2 = a * a / b
+            d = b
+        (a / b)^3 = (a * a / b * a / b) / b = (n2 * n1 / d) / d
+            n3 = n2 * n1 / d = a * a / b * a / b
+            d = b
+        a / b)^4 = ((a * a / b) * (a * a / b) / b) / b = (n2 * n2 / d) / d
+            n4 = n2 * n2 / d
+            d = b
+        (a / b)^5 = (n3 * n2 / d) / d
+            n5 = n3 * n2 / d
+            d = b
+        (a / b)^6 = (n3 * n3 / d) / d
+            n6 = n3 * n3 / d
+            d = b
+        (a / b)^7 = (n3 * n4 / d) / d
+            n7 = n3 * n4 / d
+            d = b
+    */      
     function _nLeverage(uint256 _a, uint256 _b, uint256 _leverage) internal pure returns (uint256) {
         if (_leverage == 2)
             return _n2(_a, _b);
