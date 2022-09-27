@@ -26,7 +26,7 @@ contract FetchUniswapV2 is Ownable {
             _update(_tokens[i], _pools[i]);
     }
 
-    function fetch(address _token, address _pool, uint256 _amount) public virtual returns (uint256 _quoteAmount) {
+    function fetch(address _token, address _pool, uint256 _amount) external virtual returns (uint256 _quoteAmount) {
         (uint256 _priceCumulativeLast, uint256 _lastTimestamp) = getLastInfo(_token, _pool);
         require(_lastTimestamp != 0, "Token or Pool not supported");
 
