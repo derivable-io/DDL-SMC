@@ -6,9 +6,9 @@ import "@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol";
 
 /**
     @title Fetch Price
-    @dev This contract supports fetching price of one Token using Uniswap Pool ((UniswapV2Pair))
+    @dev This contract supports fetching price of one Token using Uniswap Pool (UniswapV2Pair)
 */
-contract FetchUniswapV2 is Ownable {
+contract UniswapV2Oracle is Ownable {
     using FixedPoint for *;
 
     struct Info {
